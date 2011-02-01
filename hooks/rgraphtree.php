@@ -25,6 +25,8 @@ class rgraphtree {
 	{
 		$this->table_prefix = Kohana::config('database.default.table_prefix');
 		
+		$this->cache = new Cache;
+		
 		// Hook into routing
 		Event::add('system.pre_controller', array($this, 'add'));
 	}
@@ -47,52 +49,67 @@ class rgraphtree {
 		$view = View::factory('rgraphtree');
 		$view->rgraphtree_js = new View('rgraphtree_js');
 		
-		$array = array('id'=>'root_node','name'=>'<span style="color:#000000;font-weight:bold;font-style:italic;">'.Kohana::config('settings.site_name').'</span>','children'=>array());
+		$subdomain = Kohana::config('settings.subdomain');
 		
-		// Get parent categories
-		$p_cats = ORM::factory('category')->where('parent_id',0)->where('category_visible',1)->find_all();
-		$i = 0;
-		foreach ($p_cats as $p_cat)
-		{
-			// Set parent category
-			$array['children'][$i] = array('id'=>'c_'.$p_cat->id,'name'=>'<span style="color:#'.$p_cat->category_color.';font-weight:bold;font-style:italic;">'.$p_cat->category_title.'</span>','children'=>array());
+		// Build JSON or grab it from cache
+		$cache = Cache::instance();
+		$json = $cache->get($subdomain.'_rgraphtree_json');
+		if ( ! $json)
+		{ // Cache is Empty so Re-Cache
+		
+			$array = array('id'=>'root_node','name'=>'<span style="color:#000000;font-weight:bold;font-style:italic;">'.Kohana::config('settings.site_name').'</span>','children'=>array());
 			
-			// Get child categories
-			$c_cats = ORM::factory('category')->where('parent_id',$p_cat->id)->where('category_visible',1)->find_all();
-			$n = 0;
-			foreach ($c_cats as $c_cat)
+			// Get parent categories
+			$p_cats = ORM::factory('category')->where('parent_id',0)->where('category_visible',1)->find_all();
+			$i = 0;
+			foreach ($p_cats as $p_cat)
 			{
-				// Set child in parent node
-				$array['children'][$i]['children'][$n] = array('id'=>'c_'.$c_cat->id,'name'=>'<span style="color:#'.$c_cat->category_color.';font-weight:bold;">'.$c_cat->category_title.'</span>','children'=>array());
+				// Set parent category
+				$array['children'][$i] = array('id'=>'c_'.$p_cat->id,'name'=>'<span style="color:#'.$p_cat->category_color.';font-weight:bold;font-style:italic;">'.$p_cat->category_title.'</span>','children'=>array());
 				
-				// Get child categories reports
-				$reports = $this->get_reports_in_category($c_cat->id);
-                $r = 0;
-				foreach($reports as $report)
+				// Get child categories
+				$c_cats = ORM::factory('category')->where('parent_id',$p_cat->id)->where('category_visible',1)->find_all();
+				$n = 0;
+				foreach ($c_cats as $c_cat)
 				{
-					// Set report in the child category
-					$array['children'][$i]['children'][$n]['children'][$r] = array('id'=>'r_'.$report->id,'name'=>substr($report->incident_title,0,5).'...');
-					$r++;
+					// Set child in parent node
+					$array['children'][$i]['children'][$n] = array('id'=>'c_'.$c_cat->id,'name'=>'<span style="color:#'.$c_cat->category_color.';font-weight:bold;">'.$c_cat->category_title.'</span>','children'=>array());
+					
+					// Get child categories reports
+					$reports = $this->get_reports_in_category($c_cat->id);
+	                $r = 0;
+					foreach($reports as $report)
+					{
+						// Set report in the child category
+						$array['children'][$i]['children'][$n]['children'][$r] = array('id'=>'r_'.$report->id,'name'=>substr($report->incident_title,0,5).'...');
+						$r++;
+					}
+					
+					$n++;
 				}
 				
-				$n++;
+				// Get parent categories reports
+				
+				$reports = $this->get_reports_in_category($p_cat->id);
+				foreach($reports as $report)
+				{
+					// Set report in parent category
+					//   note: Keep using 'n' as an index here
+					$array['children'][$i]['children'][$n] = array('id'=>'r_'.$report->id,'name'=>substr($report->incident_title,0,5).'...');
+					$n++;
+				}
+				
+				$i++;
 			}
 			
-			// Get parent categories reports
-			
-			$reports = $this->get_reports_in_category($p_cat->id);
-			foreach($reports as $report)
-			{
-				// Set report in parent category
-				//   note: Keep using 'n' as an index here
-				$array['children'][$i]['children'][$n] = array('id'=>'r_'.$report->id,'name'=>substr($report->incident_title,0,5).'...');
-				$n++;
-			}
-			
-			$i++;
+			$json = json_encode($array);
+			$cache->set($subdomain.'_rgraphtree_json', $json, array('rgraphtree_json'), 600);
+			echo '<br/><br/><br/>not cached';
+		}else{
+			echo '<br/><br/><br/>cached';
 		}
 		
-		$view->rgraphtree_js->json = json_encode($array);
+		$view->rgraphtree_js->json = $json;
 		
 		//echo '<br/><br/>';
 		//echo $view->rgraphtree_js->json;
