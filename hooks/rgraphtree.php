@@ -104,9 +104,6 @@ class rgraphtree {
 			
 			$json = json_encode($array);
 			$cache->set($subdomain.'_rgraphtree_json', $json, array('rgraphtree_json'), 600);
-			echo '<br/><br/><br/>not cached';
-		}else{
-			echo '<br/><br/><br/>cached';
 		}
 		
 		$view->rgraphtree_js->json = $json;
